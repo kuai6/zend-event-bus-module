@@ -1,0 +1,60 @@
+#!/usr/bin/env php
+<?php // @codingStandardsIgnoreFile
+
+namespace EventBus\Module;
+
+use Symfony\Component\Console\Application;
+use Symfony\Component\Console\Helper\HelperSet;
+use Symfony\Component\Console\Input\InputOption;
+use Kuai6\EventBus\Module\ConfigProvider;
+use Kuai6\EventBus\Module\Tool\Command\EventBusCommand;
+use Kuai6\EventBus\Module\Tool\ManagerHelper;
+use Kuai6\EventBus\Module\Version;
+use Zend\ServiceManager\ServiceManager;
+
+$autoloadFiles = [
+    __DIR__ . '/../vendor/autoload.php',
+    __DIR__ . '/../../../autoload.php'
+];
+
+foreach ($autoloadFiles as $autoloadFile) {
+    if (file_exists($autoloadFile)) {
+        require_once $autoloadFile;
+        break;
+    }
+}
+
+$configProvider = new ConfigProvider();
+
+$config = $configProvider->__invoke();
+
+$hydratorsConfigProvider = new \Zend\Hydrator\ConfigProvider();
+$config['dependencies'] = array_merge_recursive($config['dependencies'], $hydratorsConfigProvider->getDependencyConfig());
+
+$serializersConfigProvider = new \Zend\Serializer\ConfigProvider();
+$config['dependencies'] = array_merge_recursive($config['dependencies'], $serializersConfigProvider->getDependencyConfig());
+
+//Create container
+$container = new ServiceManager($config['dependencies']);
+
+//Register full configuration as a service
+$container->setService('config', $config);
+$container->setAlias('Config', 'config');
+
+
+
+$cli = new Application('EventBus Command Line Interface', Version::VERSION);
+$cli->setCatchExceptions(true);
+$cli->setHelperSet(new HelperSet([
+        'eventBusManager' => new ManagerHelper($container),
+]));
+
+$commands = [
+    (new EventBusCommand('init'))
+        ->addUsage('Init event bus manager')
+        ->addOption('manager', 'm', InputOption::VALUE_REQUIRED, 'The EventBus manager name', 'default')
+];
+
+$cli->addCommands($commands);
+
+$cli->run();
